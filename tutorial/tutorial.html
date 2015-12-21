@@ -1,0 +1,947 @@
+<html>
+<head>
+   <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+   <link rel="stylesheet" type="text/css" href="darkgreen.css">
+</head>
+
+<body>
+<div id="container"><div id="content"><div id="main">
+
+<h1>Introduction to GluonJ</h1>
+
+<h1 class="subtitle">
+Shigeru Chiba
+</h1>
+
+<h4>Table of Contents</h4>
+
+ <p>1. <a href="#sec:gluonj">A reviser</a>
+<br/>2. <a href="#sec:reviser">More details of reviser</a>
+<br/>3. <a href="#sec:within">Within methods</a>
+<br/>4. <a href="#sec:limit">Limitations</a>
+<br/>5. <a href="#sec:anno">Using a reviser in Java</a>
+</p>
+
+<p><br/></p>
+
+<h2><a name="sec:gluonj">1. A reviser</a></h2>
+
+<p>GluonJ is an extension to Java.  It introduces a new class-like construct named
+<i>a reviser</i>.  A reviser extends the definition of an existing class like the
+intertype declaration of AspectJ.  Although the declaration of a reviser is similar to
+that of a subclass, a reviser directly modifies the definition of an existing
+class; it can add a new method and override a method in the <i>target class</i>.
+A subclass, on the other hand, defines a new class with extension while the original class
+(i.e. the super class) remains.
+</p>
+
+<p>Suppose that the following class has been declared:
+</p>
+
+<blockquote><pre>
+package test;
+public class Person {
+    public void greet() {
+        System.out.println("Hi!");
+    }
+    public static void main(String[] args) {
+        new Person().greet();
+    }
+}
+</pre></blockquote>
+
+<p>Let us extend this class definition for <code>test.Person</code>:
+</p>
+
+<blockquote><pre>
+package sample;
+public <em>reviser</em> SayHello extends test.Person {
+    public void greet() {
+        System.out.println("Hello!");
+    }
+}
+</pre></blockquote>
+
+<p>The <code>SayHello</code> is a reviser.
+It revises directly its target class <code>test.Person</code>.
+Thus, the implementation of the <code>greet</code> method in the <code>Person</code> class
+is replaced with one in the <code>SayHello</code> reviser.
+</p>
+
+<p>
+To compile the program above, you have to do the following:
+</p>
+
+<blockquote><pre>
+java -jar GluonJCompiler.jar test/Person.java sample/SayHello.java
+java -jar gluonj.jar test/Person.class sample/SayHello.class
+</pre></blockquote>
+
+<p>We assume that <code>GluonJCompiler.jar</code> and <code>gluonj.jar</code>
+are in the current directory.
+</p>
+
+<p>The compilation of a GluonJ program consists of two phases: source-to-bytecode translation
+and bytecode-to-bytecode translation.
+We call them <i>compilation</i> and <i>post-compile transformation</i>.
+The first command using <code>GluonJCompiler.jar</code> performs the first phase.
+It takes options almost
+compatible to <code>javac</code>.
+The second command using <code>gluonj.jar</code> performs the second phase.
+It takes three options, which are <code>-debug</code> (set debug mode
+to on),
+<code>-d</code> (output directory), and <code>-cp</code> (class path).
+Note that the second command takes <code>.class</code> (not <code>.java</code>!) files as arguments.
+</p>
+
+<p>Then, to run the program, do the following:
+</p>
+
+<blockquote><pre>
+java test.Person
+</pre></blockquote>
+
+<p>The program will print <code>Hello!</code>.
+Note that the <code>main</code> method creates a <code>Person</code> object and
+calls <code>greet</code> on that object.  Since <code>SayHello</code> is a reviser,
+its <code>greet</code> substitutes for the original <code>greet</code> method in
+<code>Person</code>.
+If <code>SayHello</code> were a subclass, the program would print <code>Hi!</code>
+since the <code>main</code> method does not create a <code>SayHello</code> object
+but a <code>Person</code> object, whose <code>greet</code> method prints <code>Hi!</code>.
+This resulting behavior is similar to what <i>dependency injection</i> frameworks
+provide.
+</p>
+
+<h4>Ant task</h4>
+
+<p>The compilation of a GluonJ program can be performed as an ant task.
+Currently, only the second phase (post-compile transformation) can be an ant task.
+The following is an example of <code>build.xml</code> file:
+</p>
+
+<blockquote><pre>
+&lt;?xml version="1.0"?&gt;
+&lt;project name="hello" basedir="."&gt;
+    &lt;taskdef name="weave" classname="javassist.gluonj.ant.taskdefs.Weave"&gt;
+        &lt;classpath&gt;
+            &lt;pathelement location="<em class="low">./gluonj.jar</em>"/&gt;
+        &lt;/classpath&gt;
+    &lt;/taskdef&gt;
+
+    &lt;target name="weave"&gt;
+        &lt;weave destdir="<em class="low">./out</em>" debug="<em class="low">false</em>" &gt;
+            &lt;classpath&gt;
+                &lt;pathelement path="<em class="low">./classes</em>"/&gt;
+            &lt;/classpath&gt;
+            &lt;fileset dir="<em class="low">./classes</em>" includes="<em>test/**/*</em>" /&gt;
+        &lt;/weave&gt;
+    &lt;/target&gt;
+&lt;/project&gt;
+</pre></blockquote>
+
+<p>This <code>build.xml</code> file assumes that
+<em class="low"><code>gluonj.jar</code></em> is
+in the current directory.  It also assumes that the class files produced
+by the first command
+are in the <em class="low"><code>./classes</code></em> directory
+and they are saved in the <em class="low"><code>./out</code></em>
+directory after the transformation.  The task processes class
+files specified by the <code>fileset</code> element.  In the example
+above, all class files in the
+<em class="low"><code>./classes</code></em><em><code>/test</code></em>
+(classes whose package names start with <code>test</code>) are processed.
+</p>
+
+<p>The <code>weave</code> task has the <code>debug</code> attribute.
+If it is <code>true</code>, GluonJ will print detailed log messages.
+This attribute is optional.  The default value is <code>false</code>.
+</p>
+
+
+<h4>Load-time weaving</h4>
+
+<p>The post-compile transformation can be postponed till load time.
+If you want to do that,
+the <code>-javaagent</code> command-line option must be
+given to the JVM.  For example,
+</p>
+
+<blockquote><pre>
+java -javaagent:<em class="low">gluonj.jar</em>=<em>sample.SayHello</em> test.Person
+</pre></blockquote>
+
+<p>Again, we assume that <em class="low"><code>gluonj.jar</code></em> is
+in the current directory.
+The class name following <code>gluonj.jar=</code> is a reviser's name.
+If there are multiple revisers, reviser names separated by commas must be listed here.
+(As we show later, other revisers required by a reviser listed here are automatically
+included in the list of effective revisers.)
+</p>
+
+<p>
+Note that <code>-javaagent:</code>... is a VM argument.
+This might be important when you run the program on Eclipse or other IDEs.
+</p>
+
+<p>If you want to see detailed log messages, you must specify the <code>debug</code> option.
+For example,
+</p>
+
+<blockquote><pre>
+java -javaagent:gluonj.jar=<em>debug:</em>sample.SayHello test.Person
+</pre></blockquote>
+
+<p>Note that <code>debug:</code> is inserted after <code>=</code>.
+</p>
+
+
+<h4>Load-time weaving without a Java agent</h4>
+
+<p>You can perform load-time weaving without the <code>-javaagent</code> option.
+Write the following launcher class:
+</p>
+
+<blockquote><pre>
+import javassist.gluonj.util.Loader;
+
+public class Runner {
+    public static void main(String[] args) throws Throwable {
+        Class mainClass = test.Person.class;
+        Class[] revisers = { sample.SayHello.class };
+        Loader.run(mainClass, args, revisers);
+    }
+}
+</pre></blockquote>
+
+<p>The <code>main</code> method in <code>Runner</code> runs
+the <code>main</code> method in <code>Person</code> with command-line
+arguments <code>args</code> after weaving the
+<code>SayHello</code> reviser. 
+</p>
+
+<p>The following commands compile and run the launcher class:
+
+<blockquote><pre>
+javac -cp .:gluonj.jar Runner.java 
+java -cp gluonj.jar Runner
+</pre></blockquote>
+
+<h4>Version number</h4>
+
+<p>If no arguments are given, <code>gluonj.jar</code> prints the version
+number and the copyright notices of GluonJ.
+</p>
+
+<blockquote><pre>
+java -jar <em class="low">gluonj.jar</em>
+</blockquote>
+
+<h2><a name="sec:reviser">2. More details of revisers</a></h2>
+
+<p>A reviser is similar to a subclass.
+The declaration syntax of revisers is the same as that of the subclasses
+except the <code>reviser</code> keyword.
+On the other hand, a reviser cannot be instantiated.
+If a reviser declares a new method, it appends that method to its target class.
+If a reviser overrides a method in the target class, the method implementation
+in the reviser is substituted for the original implementation in the target class.
+The original implementation is executed only when the reviser's method calls
+on <code>super</code>.
+Furthermore, if a reviser implements an interface,
+it appends that interface to the list of the
+implemented interfaces of the target class.
+</p>
+
+<p>A reviser follows the visibility rule of Java.
+A reviser can only access visible members of its target class.
+For example, it cannot access <code>private</code> members
+of its target class.
+It cannot override a <code>final</code> method of its target class.
+</p>
+
+<p>
+The semantics of revisers might be easily understood by seeing the
+current implementation of GluonJ.  Roughly speaking, a GluonJ compiler
+translates a reviser into a normal subclass in Java.  Its super class
+is the target class.  Then all occurrences of instantiation of the
+target class are also translated into instantiation of that subclass.
+This translation implements the basic behavior of a reviser.
+</p>
+
+<h4>Override static methods</h4>
+
+<p>Unlike a normal class, a reviser can override a <code>static</code> method in
+its target class.  For example,
+</p>
+
+<blockquote><pre>
+package test;
+public class Fact {
+    public <em>static</em> int fact(int n) {
+        if (n == 1)
+            return 1;
+        else
+            return n * fact(n - 1);
+    }
+    public static void main(String[] args) {
+        System.out.println(fact(5));
+    }
+}
+</pre></blockquote>
+
+<blockquote><pre>
+package sample;
+import test.Fact;
+public reviser FactLogger extends Fact {
+    public <em>static</em> int fact(int n) {
+        System.out.println("* " + n);
+        return <em>Fact.</em>fact(n);
+    }
+}
+</pre></blockquote>
+
+<p>The <code>FactLogger</code> reviser overrides the <code>static</code> method
+<code>fact</code> originally declared in the <code>Fact</code> class.
+A call from the <code>main</code> method in <code>Fact</code> executes the implementation
+of <code>fact</code> declared in <code>FactLogger</code>.
+Only a call from within <code>FactLogger</code> executes the original implementation
+in <code>Fact</code>.
+</p>
+
+<h4>Requires</h4>
+
+GluonJ allows multiple revisers to have the same target class.
+In that case, programmers have to specify the precedence order
+among those revisers.
+
+<blockquote><pre>
+package sample;
+public reviser GoodDay <em>requires SayHello</em> extends test.Person {
+    public void greet() {
+        super.greet();
+        System.out.println("It's a good day today.");
+    }
+}
+</pre></blockquote>
+
+<p>The <code>requires</code> clause between the reviser name and the
+<code>extends</code> clause specifies another reviser that this
+reviser requires.
+If a reviser <code>R</code> requires another reviser <code>S</code>,
+then the required reviser <code>S</code> is first applied to their target
+class before the requiring reviser <code>R</code> is applied.
+For example, since <code>GoodDay</code> requires <code>SayHello</code>,
+the <code>SayHello</code> reviser is applied to the
+<code>test.Person</code> class before <code>GoodDay</code>.
+Thus, when the <code>greet</code> method is called on a <code>Person</code>
+object, the implementation in <code>GoodDay</code> is first executed.
+When the <code>greet</code> method in <code>GoodDay</code> calls on
+<code>super</code>, the <code>greet</code> method in <code>SayHello</code>
+is next executed.
+This behavior is <i>Last In, First Out (LIFO)</i>.
+A method in a reviser applied the last is executed first.
+</p>
+
+<p>Multiple reviser names separated by commas can
+follow <code>requires</code>.
+If a reviser <code>R</code> requires multiple revisers <code>S1</code>,
+<code>S2</code>, <code>S3</code>, ..., then
+the revisers <code>S1</code>, <code>S2</code>, <code>S3</code>, ... are
+applied to the target class in this ordering.
+The requiring reviser <code>R</code> is applied last.
+A call on <code>super</code> by a reviser <code>R</code> executes
+the implementation in the reviser
+applied to the target class just before that calling reviser <code>R</code>.
+</p>
+
+<p>The relation among revisers specified by the <code>requires</code>
+clauses must be <em>total order</em>.  Otherwise, the post-compile
+transformation reports an error.
+</p>
+
+<p>This might look annoying but it simplifies load-time weaving.
+For example, since <code>GoodDay</code> requires <code>SayHello</code>,
+you can run <code>test.Person</code> by the following command:
+</p>
+
+<blockquote><pre>
+java -javaagent:gluonj.jar=sample.GoodDay test.Person
+</pre></blockquote>
+
+<p>Since GluonJ automatically loads all required revisers,
+not only <code>sample.GoodDay</code> but also
+<code>sample.SayHello</code> is included in the list of the revisers.
+You do not have to list all revisers like this:
+</p>
+
+<blockquote><pre>
+java -javaagent:gluonj.jar=sample.GoodDay,sample.SayHello test.Person
+</pre></blockquote>
+
+<p>A reviser can require another reviser whose target class is different
+from the target of the requiring reviser.
+Thus, you can write a reviser that directly or indirectly requires all
+the revisers necessary in your program.
+Then you can run the program by specifying only that reviser as an argument
+to the load-time weaver.
+</p>
+
+
+<h4>Using</h4>
+
+<p>A reviser <code>R</code> can access members added by the revisers that
+the reviser <code>R</code> requires
+if those members are <code>public</code> or
+visible from that reviser <code>R</code>.
+For example,
+
+</p>
+
+<blockquote><pre>
+package test;
+public class LinkNode {
+    protected LinkNode next = null;
+    public static void main(String[] args) {
+        LinkNode n = new LinkNode();
+        System.out.println(n);
+    }
+}
+</pre></blockquote>
+
+<blockquote><pre>
+package sample;
+import test.LinkNode;
+public reviser IntNode extends LinkNode {
+    public int <em>value</em>;
+    public int <em>get()</em> { return value; }
+}
+</pre></blockquote>
+
+<blockquote><pre>
+package sample;
+import test.LinkNode;
+public reviser PrintableNode <em>requires IntNode</em>  extends LinkNode {
+    public String toString() { return "Node:" + <em>get()</em> + " " + <em>value</em>; }
+}
+</pre></blockquote>
+
+<p>Since <code>PrintableNode</code> requires <code>IntNode</code>,
+the <code>toString</code> method in <code>PrintableNode</code> accesses
+the <code>get</code> method and the <code>value</code> field added by
+<code>IntNode</code>.  Note that these members are not declared in either
+<code>PritableNode</code> or <code>LinkNode</code>.
+</p>
+
+<p>A reviser can access members added by another reviser if the former requires the latter.
+On the other hand, how does a normal class access them?
+A normal class cannot require a necessary reviser by using a <code>requires</code> clause.
+</p>
+
+<p>If a normal class needs to access members added by a reviser, it uses the <code>using</code>
+declaration.
+</p>
+
+<blockquote><pre>
+package test;
+<em>using sample.IntNode;</em>
+public class NodeTest {
+    public static void main(String[] args) {
+        LinkNode n = new LinkNode();
+        System.out.println(n.value);
+    }
+}
+</pre></blockquote>
+
+<p>The <code>using</code> declaration is similar to the <code>import</code> declaration.
+It declares that the members added by a reviser will be used in the source file.
+All classes in that source file can access those members.
+
+
+</p>
+
+<h2><a name="sec:within">3. Within methods</a></h2>
+
+<p>A reviser can declare <i>a within method</i>.
+Unlike a normal method, the implementation of a within method is effective
+only when it is called from a specific call site.
+A within method usually override a method in its target class.
+The overriding is effective only when the method is called from the specific
+call site.
+A within method can be used like the <code>within</code> pointcut of AspectJ.
+</p>
+
+<p>For example,</p>
+
+<blockquote><pre>
+package test;
+public class Position {
+    public int x;
+    public void rmove(int dx) { setX(x + dx); }
+    public void setX(int newX) {
+        System.out.println("setX");
+        x = newX;
+    }
+}
+</pre></blockquote>
+
+<blockquote><pre>
+package test;
+public class PosTest {
+    public static void main(String[] args) {
+        Position p = new Position();
+        p.setX(5);
+        p.rmove(11);
+    }
+}
+</pre></blockquote>
+
+<p>Let us change this program so that a log message will be printed
+when the <code>main</code> method calls <code>setX</code>
+but not when the <code>rmove</code> method calls <code>setX</code>.
+One approach is to modify the method body of <code>main</code> but
+we do not have to modify it by hand if we use a within method.
+</p>
+
+<blockquote><pre>
+package sample;
+public reviser PosLogger extends test.Position {
+    public void setX(int newX) <em>within test.PosTest.main(String[])</em> {
+        System.out.println("x: " + x + ", newX: " + newX);
+        super.setX(newX);
+    }
+}
+</pre></blockquote>
+
+<p>Note that the <code>setX</code> method has a <code>within</code> predicate.
+This specifies this implementation of the <code>setX</code> method is effective
+only when the method is called from the <code>main</code> method in
+the <code>PosTest</code> class.
+</p>
+
+<p>If you run the program above, the result will be:
+</p>
+
+<blockquote><pre>
+x: 0, newX: 5
+setX
+setX
+</pre></blockquote>
+
+<p>When the <code>rmove</code> method in <code>Position</code> calls
+<code>setX</code>, the implementation in the <code>PosLogger</code> reviser
+will not be executed.  The original implementation in <code>Position</code> will
+be.
+</p>
+
+<p>A <code>within</code> predicate can only specify a class name.  In that case,
+the implementation of that <code>within</code> method is effective only when
+the method is called from a method directly declared in that class.
+The following is an example:
+
+<blockquote><pre>
+package sample;
+public reviser PosLogger extends test.Position {
+    public void setX(int newX) <em>within test.PosTest</em> {
+        System.out.println("x: " + x + ", newX: " + newX);
+        super.setX(newX);
+    }
+}
+</pre></blockquote>
+
+<p>The implementation of <code>setX</code>
+in <code>PosLogger</code> is effective
+only when <code>setX</code> is called from any method declared in
+the <code>PosTest</code> class.
+</p>
+
+<h2><a name="sec:limit">4. Limitations</a></h2>
+
+<p>GluonJ currently has several limitations.
+</p>
+
+<ul>
+<li>A reviser cannot override or add a new constructor.
+<p>A reviser cannot declare any constructors.  When you want to add a new constructor,
+you must instead add a factory method by a reviser.
+</p>
+
+<li>A reviser cannot declare multiple <code>within</code> methods with the
+same signature.
+<p>They must be added by multiple revisers targeting the same class.
+</p>
+</ul>
+
+<h2><a name="sec:anno">5. Using a reviser in Java</a></h2>
+
+<p>
+If you use Java annotations to describe GluonJ's revisers,
+you can use revisers in your plain Java programs.
+You can compile revisers
+by a normal Java compiler and run them with only the post-compile transformation.
+In fact, the first-phase transformation of GluonJ translates a GluonJ program into Java bytecode
+including annotations mentioned in this section.
+</p>
+
+<p>Let us rewrite the <code>SayHello</code> reviser shown above so that it will use an annotation:
+
+<blockquote><pre>
+package sample;
+import javassist.gluonj.Reviser;
+
+<em>@Reviser</em> public class SayHello <em>extends</em> test.Person {
+    public void greet() {
+        System.out.println("Hello!");
+    }
+}
+</pre></blockquote>
+
+<p>Now the <code>SayHello</code> is a plain class.  It does not revise but extends
+the <code>Person</code> class.  On the other hand, the <code>SayHello</code> class
+has an annotation <code>@Reviser</code>, which represents this class is a reviser.
+</p>
+
+<p>To run the program, you execute the following command:</p>
+
+<blockquote><pre>
+javac -cp .:gluonj.jar test/Person.java sample/SayHello.java
+java -jar gluonj.jar test/Person.class sample/SayHello.class
+java test.Person
+</pre></blockquote>
+
+<p>You can also choose load-time weaving:
+</p>
+
+<blockquote><pre>
+javac -cp .:gluonj.jar test/Person.java sample/SayHello.java
+java -javaagent:gluonj.jar=sample.SayHello test.Person
+</pre></blockquote>
+
+<p>In either case, the <code>SayHello</code> class revises the definition of
+the <code>Person</code> class.
+</p>
+
+<p>The <code>requires</code> clauses is also replaced with an annotation.
+For example, the <code>GoodDay</code> reviser shown above can be rewritten
+as following:
+</p>
+
+<blockquote><pre>
+package sample;
+import javassist.gluonj.Reviser;
+import javassist.gluonj.Require;
+
+@Reviser <em>@Require(SayHello.class)</em>
+public class GoodDay extends test.Person {
+    public void greet() {
+        super.greet();
+        System.out.println("It's a good day today.");
+    }
+}
+</pre></blockquote>
+
+<p>The <code>@Require</code> annotation declares
+that the <code>GoodDay</code> reviser requires the <code>SayHello</code>
+reviser.
+The argument to <code>@Require</code> is an array of
+<code>java.lang.Class</code>.
+Thus <code>@Require</code> can declare that multiple revisers are
+required.
+For example, if <code>SayChao</code> is a reviser, the following annotation
+is valid:
+</p>
+
+<blockquote><pre>
+@Require(<em>{</em>SayHello.class<em>,</em> SayChao.class<em>}</em>)
+</pre></blockquote>
+
+<p>Multiple revisers are surrounded with curly brackets.
+This annotation declares that <code>SayHello</code> and <code>SayChao</code>
+are required in this order.
+</p>
+
+<p>A <code>within</code> method is indicated by <code>@Within</code> and
+<code>@Code</code> annotations.  For example,
+</p>
+
+<blockquote><pre>
+package sample;
+import javassist.gluonj.Reviser;
+import javassist.gluonj.Within;
+import javassist.gluonj.Code;
+
+@Reviser public class PosLogger extends test.Position {
+    <em>@Within(test.PosTest.class) @Code("main(java.lang.String[])")</em>
+    public void setX(int newX) {
+        System.out.println("x: " + x + ", newX: " + newX);
+        super.setX(newX);
+    }
+}
+</pre></blockquote>
+
+<p>In this reviser, <code>setX</code> is a <code>within</code> method.
+It is effective only when it is called from the <code>main</code> method
+in <code>test.PosTest</code>.
+The argument to <code>@Within</code> is a <code>java.lang.Class</code>
+object.
+The <code>@Code</code> annotation specifies a method signature.
+It is optional.
+If only <code>@Within</code> is given, the <code>within</code> method is
+effective when it is called from within the class specified by that
+<code>@Within</code> annotation.
+Note that <em>a fully qualified class name</em>
+must be used in the character string given to <code>@Code</code> as
+a method signature.
+</p>
+
+<h4>Grouping</h4>
+
+<p>Multiple revisers related to the same concern should be in the same
+source file.  To do so, a <code>static</code> nested class can
+be an <code>@Reviser</code> class.
+Related <code>@Reviser</code> classes can be grouped as
+<code>static</code> nested classes in one <code>@Reviser</code> class.
+Those <code>@Reviser</code> classes do not have to target the same class.
+For example,
+</p>
+
+<blockquote><pre>
+package sample;
+import javassist.gluonj.Reviser;
+
+<em>@Reviser</em> public class Say {
+    <em>@Reviser</em> public <em>static</em> class SayHello extends test.Person {
+        public void greet() {
+            System.out.println("Hello!");
+        }
+    }
+
+    <em>@Reviser</em> public <em>static</em> class GoodDay extends test.Person {
+        public void greet() {
+            super.greet();
+            System.out.println("It's a good day today.");
+        }
+    }
+}
+</pre></blockquote>
+
+<p>An <code>@Reviser</code> class named <code>Say</code> includes
+two <code>static</code> nested classes annotated with <code>@Reviser</code>.
+These <code>static</code> nested classes are implicitly required
+by the <code>@Reviser</code> class <code>Say</code>
+in the alphabetical order (the order may depend on a compiler).
+Note that the super class of <code>Say</code> is not explicitly specified
+(hence it is <code>java.lang.Object</code>).
+Such an <code>@Reviser</code> class does not revise any class.
+It simply requires <code>static</code> nested classes within its body
+if they are annotated with <code>@Reviser</code>.
+</p>
+
+<p>The two nested classes <code>SayHello</code> and <code>GoodDay</code>
+must be <em><code>static</code></em>.  Inner classes cannot be
+<code>@Reviser</code> classes.
+</p>
+
+<p>To run the program above, do:
+</p>
+
+<blockquote><pre>
+javac -cp .:gluonj.jar test/Person.java sample/Say.java
+java -javaagent:gluonj.jar=<em>sample.Say</em> test.Person
+</pre></blockquote>
+
+<p>In the second command, <code>sample.Say</code> is given as an
+argument.  This automatically weaves the nested <code>@Require</code> classes
+as well.
+
+<h4>Accessing new members added by revisers</h4>
+
+<p>A drawback of using Java annotations is that accessing new members
+added by revisers is verbose.
+Since a Java compiler does not understand the semantics of
+revisers, when you access a new member added by a reviser,
+you have to explicitly convert the type of a target object into the
+reviser type.  You have to cheat a Java compiler.
+</p>
+
+<p>For example,</p>
+
+<blockquote><pre>
+package sample;
+import test.LinkNode;
+import javassist.gluonj.Reviser;
+import javassist.gluonj.Require;
+<em>import static javassist.gluonj.GluonJ.revise;</em>
+
+@Reviser @Require(IntNode.class)
+public class PrintableNode extends LinkNode {
+    public String toString() {
+        IntNode in = <em>(IntNode)revise(this)</em>;
+        return "Node:" + in.get() + " " + in.value;
+    }
+}
+</pre></blockquote>
+
+<p>The <code>PrintableNode</code> reviser requires <code>sample.IntNode</code>
+and revises <code>test.LinkNode</code>.
+Both <code>sample.IntNode</code>
+and <code>test.LinkNode</code> are the same as ones already shown above.
+</p>
+
+<p>To access new members <code>get</code> and </code>value</code> added
+by the <code>IntNode</code> reviser, the <code>toString</code> method
+converts the type of <code>this</code> from <code>PrintableNode</code>
+to <code>IntNode</code>.  Otherwise, those
+members would be invisible from <code>toString</code>.
+The <code>revise</code> method is a <code>static</code> method in
+<code>GluonJ</code>.  It is a simple identity function;
+receiving an argument of the <code>Object</code> type
+and returning it as is.
+Calling the
+<code>revise</code> method is equivalent to the following code:
+</p>
+
+<blockquote><pre>
+public String toString() {
+    IntNode in = <em>(IntNode)(Object)this</em>;
+    return "Node:" + in.get() + " " + in.value;
+}
+</pre></blockquote>
+
+<p>The Java compiler of JDK 1.6 accepts this type conversion as well.
+</p>
+
+<p>Note that <code>@Require</code> annotations are still necessary
+to specify the precedence order among revisers.
+If the order between <code>IntNode</code> and <code>PrintableNode</code> is not given,
+an error will be reported.
+There is no Java annotation representing <code>using</code> declarations
+since they only control the visibility of members added by revisers.
+</p>
+
+<h4>Constructors of an <code>@Reviser</code> class</h4>
+
+<p>
+Since a reviser is not a normal class, the
+definitions of <code>@Reviser</code> classes,
+which are classes annotated with <code>@Reviser</code>,
+must follow the following restrictions:
+</p>
+
+<ul>
+<li><p>No subclass of an <code>@Reviser</code> class can be defined.
+</p>
+
+<li><p>No instance of an <code>@Reviser</code> class can be made.
+</p>
+
+<li><p>An <code>@Reviser</code> class must declare the same set
+of constructors as its target class.  For every constructor
+in its target class, an <code>@Reviser</code> class must
+declare a constructor with the same signature.
+</p>
+</ul>
+
+<p>For example,</p>
+
+<blockquote><pre>
+package test;
+import sample.Incrementable;
+import static javassist.gluonj.GluonJ.revise;
+
+public class Counter {
+    protected int counter;
+    public <em>Counter(int c)</em> { counter = c; }
+    public int get() { return counter; }
+    public void decrement() {
+        if (--counter <= 0)
+            throw new RuntimeException("Bang!");
+    }
+    public static void main(String[] args) {
+        Counter c = new Counter(1);
+        ((Incrementable)revise(c)).increment();
+        c.decrement();
+        System.out.println(c.get());
+    }
+}
+</pre></blockquote>
+
+<p>Since this <code>Counter</code> class declares only one constructor,
+an <code>@Reviser</code> class revising this class
+declares one constructor taking a single integer parameter:
+</p>
+
+<blockquote><pre>
+package sample;
+import javassist.gluonj.Reviser;
+
+@Reviser public class Incrementable extends test.Counter {
+    private int delta;
+    public <em>Incrementable(int c)</em> {
+        super(c);
+        delta = 1;
+    }
+    public void increment() {
+        counter += delta;
+    }
+}
+</pre></blockquote>
+
+<p>If the <code>Counter</code> class declares more than
+one constructor, <code>Incrementable</code>
+must declare the same number of constructors.
+Note that an <code>@Reviser</code> class cannot add a new constructor
+unless the target class does declare a constructor with the same signature
+as that new constructor.
+</p>
+
+<p>For convenience, if a target class declares a number of constructors,
+an <code>@Reviser</code> class can declare only a default-constructor,
+which is a constructor taking no parameter.
+If a target class does not have the default constructor that
+takes no parameter, the default-constructor of an <code>@Reviser</code> class
+must call a non-default constructor of the target class.
+However, this call is ignored when the <code>@Reviser</code> class
+is woven.
+</p>
+
+<blockquote><pre>
+package sample;
+import javassist.gluonj.Reviser;
+
+@Reviser public class Incrementable extends test.Counter {
+    private int delta;
+    public Incrementable() {
+        <em>super(0);</em>
+        delta = 1;
+    }
+    public void increment() {
+        counter += delta;
+    }
+}
+</pre></blockquote>
+
+<p>when a reviser <code>Incrementable</code> is woven,
+a copy of the body of
+the constructor of <code>Incrementable</code> is appended to the constructor
+of <code>Counter</code>.  However, the call to the constructor of the
+super class is removed from the copy.  For example, <code>super(0)</code>
+in the constructor of <code>Incrementable</code> is not copied.  The
+constructor of <code>Counter</code> after weaving <code>Incrementable</code>
+is equivalent to the following:
+</p>
+
+<blockquote><pre>
+public Counter(int c) {
+    counter = c;
+    delta = 1;          // copied from the @Reviser class
+}
+</pre></blockquote>
+
+<hr/>
+
+<p>Copyright (C) 2006-2010 by Shigeru Chiba.  All rights reserved.
+</p>
+
+</body>
+</html>
