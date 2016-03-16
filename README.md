@@ -1,4 +1,4 @@
-# Gluonj
+# GluonJ
 
 GluonJ is an extension to Java. It introduces a new class-like construct named a reviser.
 A reviser extends the definition of an existing class like open classes of Ruby and the intertype declaration of AspectJ.
