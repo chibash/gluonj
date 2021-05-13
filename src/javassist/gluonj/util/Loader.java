@@ -56,6 +56,7 @@ public class Loader extends javassist.Loader {
         weaver = new Weaver(revisers, cl, false);
         ClassPool cp = weaver.getClassPool(); 
         setClassPool(cp);
+        delegateLoadingOf("jdk.internal.");
         this.addTranslator(cp, new javassist.Translator() {
             public void start(ClassPool pool)
                 throws NotFoundException, CannotCompileException {}

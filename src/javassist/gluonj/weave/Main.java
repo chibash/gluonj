@@ -48,7 +48,7 @@ public class Main {
     }
 
     private static void help() {
-        System.out.println("GluonJ runtime version 2.3");
+        System.out.println("GluonJ runtime version 2.4");
         System.out.println("Copyright (C) 2009- Shigeru Chbia.  All rights reserved");
         System.out.println();
         System.out.println("Usage: java -jar gluonj.jar [-debug] [-d <dest dir>] [-cp <class path>] <class file> ...");
